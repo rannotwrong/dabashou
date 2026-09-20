@@ -1,4 +1,4 @@
-# 搭把手 · 技能互换平台
+# 一技之友 · 技能互换平台
 
 在线体验：https://rannotwrong.github.io/dabashou/
 

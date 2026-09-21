@@ -88,3 +88,13 @@ test('Paid discovery requires explicit paid offers or budgets; barter remains av
   s.filter='teach';s.profile.teach.push({name:'Vibe Coding'});s.teachSelected='Vibe Coding';
   assert.equal(matchPeople(s).length,0);
 });
+
+test('Counterproposal may defer time, but cannot be confirmed until a future time is set',()=>{
+  const plan={when:'',flexible:true,myMinutes:30,theirMinutes:45,mode:'线上实时'};
+  let e=transition(pending(),'counter',plan);
+  assert.equal(e.status,'negotiating');assert.throws(()=>transition(e,'confirm'));
+  e=transition(e,'counter',{...plan,when:future(),flexible:false});
+  assert.equal(transition(e,'confirm').status,'scheduled');
+  assert.throws(()=>transition(pending(),'counter',{...plan,flexible:false}),/请选择具体时间/);
+  assert.throws(()=>transition(pending(),'counter',{...plan,when:'2020-01-01T10:00'}),/未来/);
+});

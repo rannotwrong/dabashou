@@ -1,4 +1,4 @@
-import { initialProfile, people } from './data.js?v=paid-6';
+import { initialProfile, people } from './data.js?v=plans-8';
 export const STORAGE_KEY = 'dabashou-skills-v3';
 export const clone = value => JSON.parse(JSON.stringify(value));
 export const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -75,6 +75,11 @@ export function activeExchange(state, personId, give, want) {
 export function validPlan(plan, now=Date.now()) {
   return !!plan.when && Number.isFinite(new Date(plan.when).getTime()) && new Date(plan.when).getTime()>now && [15,30,45,60].includes(Number(plan.myMinutes)) && [15,30,45,60].includes(Number(plan.theirMinutes));
 }
+export function proposalError(plan, now=Date.now()) {
+  if (![15,30,45,60].includes(Number(plan.myMinutes)) || ![15,30,45,60].includes(Number(plan.theirMinutes))) return '请选择有效的教学时长。';
+  if (!plan.when) return plan.flexible ? '' : '请选择具体时间，或勾选「还没有确定时间，先协商」。';
+  return validPlan(plan,now) ? '' : '请选择未来的具体时间，或清空时间后勾选先协商。';
+}
 export function transition(exchange, event, payload = {}) {
   const e=clone(exchange);
   const assert=(ok,message)=>{if(!ok)throw new Error(message)};
@@ -86,11 +91,11 @@ export function transition(exchange, event, payload = {}) {
       e.status='scheduled';text='对方接受了你的方案，双方已确认。';break;
     case 'counter':
       assert(['pending','negotiating','scheduled'].includes(e.status),'当前阶段不能改期');
-      assert(validPlan(payload),'请选择未来的具体时间');
+      assert(!proposalError(payload),proposalError(payload));
       e.plan=payload;e.status='negotiating';text='对方提出新方案，等待你确认。';break;
     case 'propose':
       assert(['pending','negotiating','scheduled'].includes(e.status),'当前阶段不能修改方案');
-      assert(validPlan(payload),'请选择未来的具体时间');
+      assert(!proposalError(payload),proposalError(payload));
       e.plan=payload;e.status='pending';text='你提出了新方案，等待对方确认。';break;
     case 'confirm':
       assert(e.status==='negotiating','没有待确认的新方案');assert(validPlan(e.plan),'约定时间已过，请重新协商');

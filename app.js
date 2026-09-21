@@ -18,6 +18,7 @@ try {
     if(old) {state=migrate(JSON.parse(old));storageWarning='已将旧交换卡拆分为独立技能，并保留原邀请。';}
   }
 } catch { storageWarning='本地数据暂时无法读取，当前使用示例。'; }
+if(!['all','exchange','learn','teach'].includes(state.filter))state.filter='all';
 if(!state.profile.learn.some(s=>s.name===state.selected))state.selected=state.profile.learn[0]?.name||'';
 function persist() {try {localStorage.setItem(STORAGE_KEY,JSON.stringify(state));} catch {toast('无法保存到浏览器，刷新后更改可能丢失。');}}
 function toast(text) {$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,4500);}
@@ -37,16 +38,26 @@ function render() {
 }
 function renderDiscover() {
   const matches=matchPeople(state);
-  $('#app').innerHTML=`<div class="discovery layout"><aside class="sidebar"><h1>找到互补的技能</h1><p class="muted intro">用你会的，学你想学的。</p><div class="section-label"><h2>我想学的</h2>${button('管理','skills','learn','quiet')}</div><div class="skill-choices">${state.profile.learn.map(s=>button(esc(s.name),'select',s.name,'skill-choice',`aria-pressed="${s.name===state.selected}"`)).join('')||button('添加想学的技能','add-skill','learn','secondary')}</div><div class="section-label spaced"><h2>我能教的</h2>${button('管理','skills','teach','quiet')}</div><div class="tags">${state.profile.teach.map(s=>`<span class="tag">${esc(s.name)}</span>`).join('')||hint('添加你愿意分享的技能')}</div><p class="small muted">每项能教的技能都会参与匹配，无需提前绑定。</p><div class="availability"><div class="section-label"><h2>我的时间</h2>${button('调整','times','','quiet')}</div><p>${esc(state.profile.times.join('、')||'尚未设置')}</p><span class="small muted">${state.profile.flexible?'其他时段也可协商':'仅匹配已选时段'} · 线上交流</span></div></aside><section class="recommendations" aria-label="技能推荐"><div class="section-label"><div><h2 class="results-title">${esc(state.selected||'技能')}伙伴</h2><p class="small muted">${matches.length?`${matches.length} 位技能互补的伙伴，优先展示时段有交集的人`:(state.selected?'可以调整条件，或保留匹配意向':'从一项你感兴趣的技能开始')}</p></div>${button(`收藏 ${state.saved.length}`,'saved','','quiet')}</div><div class="filters" aria-label="时间筛选">${[['all','全部'],['time','时段有交集'],['flex','时间待协商']].map(([v,t])=>button(t,'filter',v,'filter',`aria-pressed="${state.filter===v}"`)).join('')}</div><div class="result-list">${matches.length?matches.map(matchCard).join(''):emptyHTML()}</div></section></div>`;
+  if(!state.profile.teach.some(s=>s.name===state.teachSelected))state.teachSelected=state.profile.teach[0]?.name||'';
+  const teaching=state.filter==='teach';
+  const title=state.filter==='all'?'为你推荐的伙伴':`${(teaching?state.teachSelected:state.selected)||'技能'}伙伴`;
+  const description={all:'汇总互换、学习与教授机会，双向互补优先',exchange:'双方技能互补，可以协商交换方案',learn:'找到能教你的人，无需先满足对方的学习需求',teach:'找到想学你技能的人，可切换左侧能教的技能'}[state.filter];
+  $('#app').innerHTML=`<div class="discovery layout"><aside class="sidebar"><h1>找到互补的技能</h1><p class="muted intro">用你会的，学你想学的。</p><div class="section-label"><h2>我想学的</h2>${button('管理','skills','learn','quiet')}</div><div class="skill-choices">${state.profile.learn.map(s=>button(esc(s.name),'select',s.name,'skill-choice',`aria-pressed="${s.name===state.selected}"`)).join('')||button('添加想学的技能','add-skill','learn','secondary')}</div><div class="section-label spaced"><h2>我能教的</h2>${button('管理','skills','teach','quiet')}</div><div class="tags">${state.profile.teach.map(s=>teaching?button(esc(s.name),'select-teach',s.name,'skill-choice',`aria-pressed="${s.name===state.teachSelected}"`):`<span class="tag">${esc(s.name)}</span>`).join('')||hint('添加你愿意分享的技能')}</div><p class="small muted">${teaching?'选择一项能教的技能，查看对应的学习伙伴。':'每项能教的技能都会参与匹配，无需提前绑定。'}</p><div class="availability"><div class="section-label"><h2>我的时间</h2>${button('调整','times','','quiet')}</div><p>${esc(state.profile.times.join('、')||'尚未设置')}</p><span class="small muted">${state.profile.flexible?'其他时段也可协商':'仅匹配已选时段'} · 线上交流</span></div></aside><section class="recommendations" aria-label="技能推荐"><div class="section-label"><div><h2 class="results-title">${esc(title)}</h2><p class="small muted">${matches.length?`${matches.length} 位伙伴 · `:''}${description}</p></div>${button(`收藏 ${state.saved.length}`,'saved','','quiet')}</div><div class="filters" aria-label="伙伴类型筛选">${[['all','全部'],['exchange','技能互换'],['learn','技能学习'],['teach','技能教授']].map(([v,t])=>button(t,'filter',v,'filter',`aria-pressed="${state.filter===v}"`)).join('')}</div><div class="result-list">${matches.length?matches.map(matchCard).join(''):emptyHTML()}</div></section></div>`;
 }
 function matchCard(m) {
+  if(m.kind!=='exchange')return directionalCard(m);
   const p=m.person, pair=m.pairs[0], skill=p.teach.find(t=>t.name===pair.want), gives=[...new Set(m.pairs.map(x=>x.give))];
   const inProgress=state.exchanges.find(e=>e.personId===p.id&&e.want===pair.want&&!['completed','cancelled'].includes(e.status));
-  return `<article class="match-card"><div class="card-person"><div class="who"><span class="avatar" aria-hidden="true">${esc(p.name.slice(-1))}</span><strong>${esc(p.name)}</strong></div><span class="status neutral">${m.common.length?'时段有交集':'时间待协商'}</span></div><div class="skill-pair"><div><p class="eyebrow">对方能教 · 你想学</p><h3>${esc(pair.want)}</h3><p class="skill-description">${esc(skill.scope)}</p></div><span class="exchange-symbol" aria-hidden="true">⇄</span><div><p class="eyebrow">你能教 · 对方想学</p><h3>${gives.map(esc).join('<span class="or"> 或 </span>')}</h3><p class="skill-description">${gives.length>1?'发起时选择其中一项即可':esc(p.learn.find(s=>s.name===gives[0]).goal)}</p></div></div><div class="match-meta"><span>${esc(m.common.length?m.common.join('、'):p.times.join('、'))}${m.common.length?' · 具体时间待确认':''}</span><span>${p.record?`完成 ${p.record.completed} 次 · 示例记录`:'新伙伴 · 暂无互换记录'}</span></div><div class="card-actions"><div>${button('查看档案','profile',p.id,'quiet')}${button(state.saved.includes(p.id)?'已收藏':'收藏','save',p.id,'quiet',`aria-pressed="${state.saved.includes(p.id)}"`)}</div>${inProgress?button('查看互换','detail',inProgress.id,'primary'):button('查看交换方案','invite',p.id,'primary')}</div><div class="skip-row">${button('暂不考虑','skip',p.id,'quiet small')}</div></article>`;
+  return `<article class="match-card"><div class="card-person"><div class="who"><span class="avatar" aria-hidden="true">${esc(p.name.slice(-1))}</span><strong>${esc(p.name)}</strong><span class="small muted">技能互换</span></div><span class="status neutral">${m.common.length?'时段有交集':'时间待协商'}</span></div><div class="skill-pair"><div><p class="eyebrow">对方能教 · 你想学</p><h3>${esc(pair.want)}</h3><p class="skill-description">${esc(skill.scope)}</p></div><span class="exchange-symbol" aria-hidden="true">⇄</span><div><p class="eyebrow">你能教 · 对方想学</p><h3>${gives.map(esc).join('<span class="or"> 或 </span>')}</h3><p class="skill-description">${gives.length>1?'发起时选择其中一项即可':esc(p.learn.find(s=>s.name===gives[0]).goal)}</p></div></div><div class="match-meta"><span>${esc(m.common.length?m.common.join('、'):p.times.join('、'))}${m.common.length?' · 具体时间待确认':''}</span><span>${p.record?`完成 ${p.record.completed} 次 · 示例记录`:'新伙伴 · 暂无互换记录'}</span></div><div class="card-actions"><div>${button('查看档案','profile',p.id,'quiet')}${button(state.saved.includes(p.id)?'已收藏':'收藏','save',p.id,'quiet',`aria-pressed="${state.saved.includes(p.id)}"`)}</div>${inProgress?button('查看互换','detail',inProgress.id,'primary'):button('查看交换方案','invite',p.id,'primary')}</div><div class="skip-row">${button('暂不考虑','skip',p.id,'quiet small')}</div></article>`;
+}
+function directionalCard(m) {
+  const p=m.person, learning=m.kind==='learn', entries=learning?m.learning:m.teaching;
+  const content=entries.map(s=>`<div><p class="eyebrow">${learning?'对方能教 · 你想学':'对方想学 · 你能教'}</p><h3>${esc(s.name)}</h3><p class="skill-description">${esc(learning?s.scope:s.goal)}</p></div>`).join('');
+  return `<article class="match-card"><div class="card-person"><div class="who"><span class="avatar" aria-hidden="true">${esc(p.name.slice(-1))}</span><strong>${esc(p.name)}</strong><span class="small muted">${learning?'技能学习':'技能教授'}</span></div><span class="status neutral">${m.common.length?'时段有交集':'时间待协商'}</span></div><div class="directional-skills">${content}</div><div class="match-meta"><span>${esc((m.common.length?m.common:p.times).join('、'))} · 具体时间待确认</span><span>${m.pairs.length?'也可以双向互换，查看档案了解更多':'当前为单向技能匹配，可先查看档案了解需求'}</span></div><div class="card-actions">${button(state.saved.includes(p.id)?'已收藏':'收藏','save',p.id,'quiet',`aria-pressed="${state.saved.includes(p.id)}"`)}${button('查看档案','profile',p.id,'primary')}</div><div class="skip-row">${button('暂不考虑','skip',p.id,'quiet small')}</div></article>`;
 }
 function emptyHTML() {
-  const d=diagnose(state),subscribed=state.subscriptions.includes(state.selected);
-  return `<div class="empty"><span class="empty-symbol" aria-hidden="true">⇄</span><h3>${esc(d.title)}</h3><p>${esc(d.text)}</p><div class="empty-actions">${d.code==='time'?button('放宽时间条件','relax','','primary'):d.code==='skipped'?button('重新查看推荐','unskip','','primary'):button(d.code==='learn'?'添加想学技能':'补充能教技能','add-skill',d.code==='learn'?'learn':'teach','primary')}${button('调整学习目标','skills','learn','secondary')}${state.selected?button(subscribed?'已保留匹配意向':'订阅新匹配','subscribe',state.selected,'quiet',subscribed?'disabled':''):''}</div><p class="small muted">演示版只保存匹配意向，不会发送通知。</p></div>`;
+  const d=diagnose(state),subscribed=state.subscriptions.includes(state.selected),teaching=state.filter==='teach';
+  return `<div class="empty"><span class="empty-symbol" aria-hidden="true">⇄</span><h3>${esc(d.title)}</h3><p>${esc(d.text)}</p><div class="empty-actions">${d.code==='time'?button('放宽时间条件','relax','','primary'):d.code==='skipped'?button('重新查看推荐','unskip','','primary'):button(['learn','supply'].includes(d.code)?'添加想学技能':'补充能教技能','add-skill',['learn','supply'].includes(d.code)?'learn':'teach','primary')}${button(teaching?'管理能教技能':'管理想学技能','skills',teaching?'teach':'learn','secondary')}${state.selected&&!teaching?button(subscribed?'已保留匹配意向':'订阅新匹配','subscribe',state.selected,'quiet',subscribed?'disabled':''):''}</div><p class="small muted">演示版只保存匹配意向，不会发送通知。</p></div>`;
 }
 function renderMine() {
   const p=state.profile;
@@ -148,7 +159,8 @@ document.addEventListener('click',event=>{
     case 'page':route(id);break;
     case 'detail':route('exchanges',id);break;
     case 'close':close();break;
-    case 'select':state.selected=id;state.filter='all';persist();render();break;
+    case 'select':state.selected=id;if(state.filter==='teach')state.filter='learn';persist();render();break;
+    case 'select-teach':state.teachSelected=id;persist();render();break;
     case 'filter':state.filter=id;persist();render();break;
     case 'skills':manageSkills(id);break;
     case 'add-skill':editSkill(id);break;
@@ -160,9 +172,9 @@ document.addEventListener('click',event=>{
     case 'save':state.saved=state.saved.includes(id)?state.saved.filter(x=>x!==id):[...state.saved,id];persist();render();break;
     case 'saved':showSaved();break;
     case 'unsave':state.saved=state.saved.filter(x=>x!==id);persist();render();showSaved();break;
-    case 'skip':state.skipped.push(`${state.selected}:${id}`);persist();render();toast('已暂时跳过，可在无推荐时重新查看。');break;
-    case 'unskip':state.skipped=state.skipped.filter(k=>!k.startsWith(`${state.selected}:`));state.filter='all';persist();render();break;
-    case 'relax':state.profile.flexible=true;state.filter='all';persist();render();toast('已允许协商其他时段，具体时间仍需双方确认。');break;
+    case 'skip':{const match=matchPeople(state).find(m=>m.person.id===id);if(match)state.skipped.push(match.skipKey);persist();render();toast('已暂时跳过，可在无推荐时重新查看。');break;}
+    case 'unskip':state.skipped=state.skipped.filter(k=>!k.startsWith(`${state.filter}:${state.filter==='teach'?state.teachSelected:state.selected}:`));persist();render();break;
+    case 'relax':state.profile.flexible=true;persist();render();toast('已允许协商其他时段，具体时间仍需双方确认。');break;
     case 'subscribe':if(!state.subscriptions.includes(id))state.subscriptions.push(id);persist();render();toast('匹配意向已保留。演示版不发送通知。');break;
     case 'unsubscribe':state.subscriptions=state.subscriptions.filter(s=>s!==id);persist();render();break;
     case 'invite':invite(id);break;

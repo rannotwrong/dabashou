@@ -35,21 +35,34 @@ export function combinations(profile, person, skill) {
     person.learn.filter(w=>profile.teach.some(g=>g.name===w.name)).map(w=>({want:t.name,give:w.name})));
 }
 export function matchPeople(state, catalog = people) {
-  return catalog.map(person=>({person, pairs:combinations(state.profile,person,state.selected), common:person.times.filter(t=>state.profile.times.includes(t))}))
-    .filter(m=>m.pairs.length && !state.skipped.includes(`${state.selected}:${m.person.id}`))
-    .map(m=>({...m, available:!!m.common.length || state.profile.flexible || m.person.flexible}))
-    .filter(m=>m.available && (state.filter!=='time'||m.common.length) && (state.filter!=='flex'||!m.common.length))
-    .sort((a,b)=>Number(!!b.common.length)-Number(!!a.common.length));
+  const mode = ['exchange','learn','teach'].includes(state.filter) ? state.filter : 'all';
+  const teachSelected = state.profile.teach.some(s=>s.name===state.teachSelected) ? state.teachSelected : state.profile.teach[0]?.name;
+  return catalog.map(person=>{
+    const pairs=combinations(state.profile,person,state.selected);
+    const learning=person.teach.filter(t=>t.name===state.selected && state.profile.learn.some(s=>s.name===t.name));
+    const teaching=person.learn.filter(t=>state.profile.teach.some(s=>s.name===t.name) && (mode!=='teach'||t.name===teachSelected));
+    const kind=mode==='all'?(pairs.length?'exchange':learning.length?'learn':'teach'):mode;
+    const relevant=mode==='exchange'?pairs.length:mode==='learn'?learning.length:mode==='teach'?teaching.length:learning.length||teaching.length;
+    const common=person.times.filter(t=>state.profile.times.includes(t));
+    const skipKey=`${mode}:${mode==='teach'?teachSelected:state.selected}:${person.id}`;
+    return {person,pairs,learning,teaching,kind,relevant,common,skipKey,available:!!common.length||state.profile.flexible||person.flexible};
+  }).filter(m=>m.relevant && m.available && !state.skipped.includes(m.skipKey))
+    .sort((a,b)=>Number(b.kind==='exchange')-Number(a.kind==='exchange')||Number(!!b.common.length)-Number(!!a.common.length));
 }
 export function diagnose(state, catalog=people) {
-  if (!state.profile.learn.length) return {code:'learn',title:'先添加一项想学的技能',text:'英语口语、吉他或 Vibe Coding，都可以从一次交流开始。'};
-  if (!state.profile.teach.length) return {code:'teach',title:'还差一项你能教的技能',text:'补充你愿意分享的经验，才能找到双向互补的伙伴。'};
+  const mode=['exchange','learn','teach'].includes(state.filter)?state.filter:'all';
+  if(mode==='teach'&&!state.profile.teach.length) return {code:'teach',title:'先添加一项能教的技能',text:'分享你熟悉的经验，找到想向你学习的人。'};
+  if((mode==='learn'||mode==='exchange')&&!state.profile.learn.length) return {code:'learn',title:'先添加一项想学的技能',text:'英语口语、吉他或 Vibe Coding，都可以从一次交流开始。'};
+  if(mode==='exchange'&&!state.profile.teach.length) return {code:'teach',title:'还差一项你能教的技能',text:'补充你愿意分享的经验，才能找到双向互补的伙伴。'};
+  const possible=matchPeople({...state,profile:{...state.profile,flexible:true},skipped:[]},catalog);
+  if(possible.length) {
+    if(possible.every(m=>state.skipped.includes(m.skipKey))) return {code:'skipped',title:'这组推荐已暂时跳过',text:'可以重新查看，或保留学习意向等待其他伙伴。'};
+    return {code:'time',title:'技能符合，时间还没对上',text:'可以放宽时间条件，或修改自己的可用时段。具体日期仍需双方确认。'};
+  }
+  if(mode==='teach')return {code:'demand',title:'暂时没有匹配的学习伙伴',text:'可以切换其他能教的技能，或稍后再来看看。'};
   const providers=catalog.filter(p=>p.teach.some(t=>t.name===state.selected));
-  if (!providers.length) return {code:'supply',title:`暂时还没有人教${state.selected}`,text:'保留你的学习意向，或切换其他想学的技能。'};
-  const mutual=providers.filter(p=>combinations(state.profile,p,state.selected).length);
-  if (!mutual.length) return {code:'skills',title:'有人能教，但暂时无法双向互换',text:`他们想学：${[...new Set(providers.flatMap(p=>p.learn.map(s=>s.name)))].join('、')}。如果你也会，可以补充到能教的技能中。`};
-  if (mutual.every(p=>state.skipped.includes(`${state.selected}:${p.id}`))) return {code:'skipped',title:'这组推荐已暂时跳过',text:'可以重新查看，或保留学习意向等待其他伙伴。'};
-  return {code:'time',title:'技能互补，时间还没对上',text:'可以放宽时间条件，或修改自己的可用时段。具体日期仍需双方确认。'};
+  if(mode==='exchange'&&providers.length)return {code:'skills',title:'有人能教，但暂时无法双向互换',text:`他们想学：${[...new Set(providers.flatMap(p=>p.learn.map(s=>s.name)))].join('、')}。可以补充能教的技能，或切换到技能学习查看。`};
+  return {code:'supply',title:'暂时没有符合条件的伙伴',text:'可以调整想学或能教的技能，或保留学习意向等待新伙伴。'};
 }
 export const STATES = ['pending','negotiating','scheduled','learning','verifying','completed','cancelled'];
 export const LABELS = {pending:'待对方回应',negotiating:'待你确认方案',scheduled:'已约定',learning:'互换进行中',verifying:'待确认学习成果',completed:'已完成',cancelled:'已取消'};

@@ -4,22 +4,22 @@ import { freshState, validState, migrate, matchPeople, diagnose, transition, val
 const future=()=>new Date(Date.now()+7*86400000).toISOString().slice(0,16);
 const pending=()=>({id:'test',personId:'zhou',name:'小周',give:'PPT 排版',want:'英语口语',status:'pending',plan:{when:future(),myMinutes:30,theirMinutes:30,mode:'线上实时'},done:{me:false,them:false},outcomes:{me:null,them:null},review:null,history:[]});
 test('Independent skill pools find cross-card matches and group multiple return options by person',()=>{
-  const s=freshState();const list=matchPeople(s);
+  const s=freshState();s.filter='exchange';const list=matchPeople(s);
   assert.deepEqual(list.map(m=>m.person.id),['zhou','chen']);
   assert.deepEqual(list[1].pairs,[{give:'Excel 公式',want:'英语口语'}]);
   s.selected='手机摄影';const lin=matchPeople(s).find(m=>m.person.id==='lin');
   assert.deepEqual(lin.pairs.map(p=>p.give),['Excel 公式','PPT 排版']);
 });
 test('Time filtering and relaxing do not invent common time',()=>{
-  const s=freshState();s.selected='Vibe Coding';s.profile.learn.push({name:'Vibe Coding'});s.profile.flexible=false;
+  const s=freshState();s.filter='exchange';s.selected='Vibe Coding';s.profile.learn.push({name:'Vibe Coding'});s.profile.flexible=false;
   assert.equal(matchPeople(s).length,0);assert.equal(diagnose(s).code,'time');
   s.profile.flexible=true;const matches=matchPeople(s);assert.equal(matches.length,1);assert.equal(matches[0].common.length,0);
-  s.filter='time';assert.equal(matchPeople(s).length,0);
+  s.profile.flexible=false;assert.equal(matchPeople(s).length,0);
 });
 test('No result diagnoses distinguish missing skill, missing supply, reciprocity and skipped cards',()=>{
-  const s=freshState();s.selected='吉他';s.profile.learn.push({name:'吉他'});assert.equal(diagnose(s).code,'skills');
+  const s=freshState();s.filter='exchange';s.selected='吉他';s.profile.learn.push({name:'吉他'});assert.equal(diagnose(s).code,'skills');
   s.selected='陶艺';assert.equal(diagnose(s).code,'supply');
-  s.selected='英语口语';s.skipped=['英语口语:zhou','英语口语:chen'];assert.equal(diagnose(s).code,'skipped');
+  s.selected='英语口语';s.skipped=['exchange:英语口语:zhou','exchange:英语口语:chen'];assert.equal(diagnose(s).code,'skipped');
   s.profile.teach=[];assert.equal(diagnose(s).code,'teach');
   s.profile.learn=[];assert.equal(diagnose(s).code,'learn');
 });
@@ -58,4 +58,24 @@ test('Old cards migrate without discarding pending invitations',()=>{
 test('Malformed local data rejected while normal state survives JSON persistence',()=>{
   assert.ok(validState(JSON.parse(JSON.stringify(freshState()))));
   const s=freshState();s.exchanges=[{}];assert.equal(validState(s),false);
+});
+
+test('Discovery types include one-way learning and teaching without requiring reciprocity',()=>{
+  const s=freshState();
+  const all=matchPeople(s);assert.deepEqual(all.map(m=>m.person.id),['zhou','chen','lin','yu','xu']);
+  assert.equal(new Set(all.map(m=>m.person.id)).size,all.length);
+  s.filter='learn';assert.deepEqual(matchPeople(s).map(m=>m.person.id),['zhou','chen']);
+  s.profile.teach=[];assert.equal(matchPeople(s).length,2);
+  s.profile.learn.push({name:'吉他'});s.selected='吉他';assert.deepEqual(matchPeople(s).map(m=>m.person.id),['an']);
+  s.filter='exchange';assert.equal(matchPeople(s).length,0);
+});
+test('Teaching filters by the selected skill and works without any learning goals',()=>{
+  const s=freshState();s.filter='teach';s.teachSelected='Excel 公式';s.profile.learn=[];
+  assert.deepEqual(matchPeople(s).map(m=>m.person.id),['chen','lin','yu']);
+  assert.ok(matchPeople(s).every(m=>m.kind==='teach'&&m.teaching.every(t=>t.name==='Excel 公式')));
+  s.teachSelected='PPT 排版';assert.deepEqual(matchPeople(s).map(m=>m.person.id),['zhou','lin','xu']);
+});
+test('Skipping a learning result does not hide the partner in another discovery type',()=>{
+  const s=freshState();s.filter='learn';s.skipped=[matchPeople(s)[0].skipKey];assert.equal(matchPeople(s).length,1);
+  s.filter='exchange';assert.equal(matchPeople(s).length,2);
 });

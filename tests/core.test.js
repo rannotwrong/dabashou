@@ -19,7 +19,7 @@ test('Time filtering and relaxing do not invent common time',()=>{
 test('No result diagnoses distinguish missing skill, missing supply, reciprocity and skipped cards',()=>{
   const s=freshState();s.filter='exchange';s.selected='吉他';s.profile.learn.push({name:'吉他'});assert.equal(diagnose(s).code,'skills');
   s.selected='陶艺';assert.equal(diagnose(s).code,'supply');
-  s.selected='英语口语';s.skipped=['exchange:英语口语:zhou','exchange:英语口语:chen'];assert.equal(diagnose(s).code,'skipped');
+  s.selected='英语口语';s.skipped=matchPeople(s).map(m=>m.skipKey);assert.equal(diagnose(s).code,'skipped');
   s.profile.teach=[];assert.equal(diagnose(s).code,'teach');
   s.profile.learn=[];assert.equal(diagnose(s).code,'learn');
 });
@@ -62,8 +62,9 @@ test('Malformed local data rejected while normal state survives JSON persistence
 
 test('Discovery types include one-way learning and teaching without requiring reciprocity',()=>{
   const s=freshState();
-  const all=matchPeople(s);assert.deepEqual(all.map(m=>m.person.id),['zhou','chen','lin','yu','xu']);
-  assert.equal(new Set(all.map(m=>m.person.id)).size,all.length);
+  const all=matchPeople(s);
+  assert.equal(new Set(all.map(m=>m.person.id+':'+m.kind)).size,all.length);
+  assert.deepEqual(all.filter(m=>m.person.id==='zhou').map(m=>m.kind),['exchange','learn','teach']);
   s.filter='learn';assert.deepEqual(matchPeople(s).map(m=>m.person.id),['zhou','chen']);
   s.profile.teach=[];assert.equal(matchPeople(s).length,2);
   s.profile.learn.push({name:'吉他'});s.selected='吉他';assert.deepEqual(matchPeople(s).map(m=>m.person.id),['an']);
@@ -78,4 +79,12 @@ test('Teaching filters by the selected skill and works without any learning goal
 test('Skipping a learning result does not hide the partner in another discovery type',()=>{
   const s=freshState();s.filter='learn';s.skipped=[matchPeople(s)[0].skipKey];assert.equal(matchPeople(s).length,1);
   s.filter='exchange';assert.equal(matchPeople(s).length,2);
+});
+
+test('Paid discovery requires explicit paid offers or budgets; barter remains available',()=>{
+  const s=freshState();s.selected='手机摄影';s.filter='learn';
+  assert.deepEqual(matchPeople(s).map(m=>m.person.id),['lin']);
+  s.filter='exchange';assert.ok(matchPeople(s).some(m=>m.person.id==='yu'));
+  s.filter='teach';s.profile.teach.push({name:'Vibe Coding'});s.teachSelected='Vibe Coding';
+  assert.equal(matchPeople(s).length,0);
 });

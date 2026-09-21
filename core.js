@@ -1,4 +1,4 @@
-import { initialProfile, people } from './data.js';
+import { initialProfile, people } from './data.js?v=paid-6';
 export const STORAGE_KEY = 'dabashou-skills-v3';
 export const clone = value => JSON.parse(JSON.stringify(value));
 export const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -37,15 +37,17 @@ export function combinations(profile, person, skill) {
 export function matchPeople(state, catalog = people) {
   const mode = ['exchange','learn','teach'].includes(state.filter) ? state.filter : 'all';
   const teachSelected = state.profile.teach.some(s=>s.name===state.teachSelected) ? state.teachSelected : state.profile.teach[0]?.name;
-  return catalog.map(person=>{
+  return catalog.flatMap(person=>{
     const pairs=combinations(state.profile,person,state.selected);
-    const learning=person.teach.filter(t=>t.name===state.selected && state.profile.learn.some(s=>s.name===t.name));
-    const teaching=person.learn.filter(t=>state.profile.teach.some(s=>s.name===t.name) && (mode!=='teach'||t.name===teachSelected));
-    const kind=mode==='all'?(pairs.length?'exchange':learning.length?'learn':'teach'):mode;
-    const relevant=mode==='exchange'?pairs.length:mode==='learn'?learning.length:mode==='teach'?teaching.length:learning.length||teaching.length;
+    const learning=person.teach.filter(t=>t.paid===true && Number(t.price)>0 && Number(t.minutes)>0 && t.name===state.selected && state.profile.learn.some(s=>s.name===t.name));
+    const teaching=person.learn.filter(t=>t.paid===true && Number(t.budget)>0 && Number(t.minutes)>0 && state.profile.teach.some(s=>s.name===t.name) && (mode!=='teach'||t.name===teachSelected));
     const common=person.times.filter(t=>state.profile.times.includes(t));
-    const skipKey=`${mode}:${mode==='teach'?teachSelected:state.selected}:${person.id}`;
-    return {person,pairs,learning,teaching,kind,relevant,common,skipKey,available:!!common.length||state.profile.flexible||person.flexible};
+    const kinds=mode==='all'?['exchange','learn','teach']:[mode];
+    return kinds.map(kind=>{
+      const relevant=kind==='exchange'?pairs.length:kind==='learn'?learning.length:teaching.length;
+      const skipKey=`${mode}:${mode==='teach'?teachSelected:state.selected}:${person.id}:${kind}`;
+      return {person,pairs,learning,teaching,kind,relevant,common,skipKey,available:!!common.length||state.profile.flexible||person.flexible};
+    });
   }).filter(m=>m.relevant && m.available && !state.skipped.includes(m.skipKey))
     .sort((a,b)=>Number(b.kind==='exchange')-Number(a.kind==='exchange')||Number(!!b.common.length)-Number(!!a.common.length));
 }
@@ -59,7 +61,8 @@ export function diagnose(state, catalog=people) {
     if(possible.every(m=>state.skipped.includes(m.skipKey))) return {code:'skipped',title:'这组推荐已暂时跳过',text:'可以重新查看，或保留学习意向等待其他伙伴。'};
     return {code:'time',title:'技能符合，时间还没对上',text:'可以放宽时间条件，或修改自己的可用时段。具体日期仍需双方确认。'};
   }
-  if(mode==='teach')return {code:'demand',title:'暂时没有匹配的学习伙伴',text:'可以切换其他能教的技能，或稍后再来看看。'};
+  if(mode==='teach')return {code:'demand',title:'暂时没有匹配的付费学习需求',text:'这里只展示明确愿意付费的一对一学习需求。可以切换其他能教的技能。'};
+  if(mode==='learn')return {code:'supply',title:'暂时没有匹配的付费课程',text:'这里只展示明确提供收费一对一教学的伙伴，可以切换其他想学的技能。'};
   const providers=catalog.filter(p=>p.teach.some(t=>t.name===state.selected));
   if(mode==='exchange'&&providers.length)return {code:'skills',title:'有人能教，但暂时无法双向互换',text:`他们想学：${[...new Set(providers.flatMap(p=>p.learn.map(s=>s.name)))].join('、')}。可以补充能教的技能，或切换到技能学习查看。`};
   return {code:'supply',title:'暂时没有符合条件的伙伴',text:'可以调整想学或能教的技能，或保留学习意向等待新伙伴。'};

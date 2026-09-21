@@ -37,3 +37,20 @@ export const people = [
     teach: [{ name: 'Vibe Coding', level: '零基础、入门', scope: '需求拆解、提示词与网页原型验证。需要电脑，不承诺生成生产级系统。', evidence: '网页原型拆解示例', sample: '把“练习记录工具”拆成：输入练习内容、显示记录、保存到浏览器。\n先约定验收步骤，再请 AI 实现；通过刷新页面验证数据是否保留。' }],
     learn: [{ name: 'PPT 排版', level: '入门', goal: '用一页 PPT 清楚讲述一个产品方案。' }], times: ['周五晚上'], flexible: false, record: null }
 ];
+
+// All prices and budgets below are fictional per-session examples, not market quotes.
+const paidExamples = {
+  zhou: { offer: [80,45], requests: {'PPT 排版':[100,60]} },
+  chen: { offer: [60,30], requests: {'Excel 公式':[80,45]} },
+  lin: { offer: [90,60], requests: {'Excel 公式':[70,45], 'PPT 排版':[100,60]} },
+  yu: { offer: null, requests: {'Excel 公式':[60,30]} },
+  an: { offer: [100,60], requests: {} },
+  xu: { offer: [120,60], requests: {'PPT 排版':[120,60]} }
+};
+for (const p of people) {
+  const example=paidExamples[p.id];
+  for (const skill of p.teach) if(example.offer) Object.assign(skill,{paid:true,price:example.offer[0],minutes:example.offer[1]});
+  for (const skill of p.learn) if(example.requests[skill.name]) {
+    const [budget,minutes]=example.requests[skill.name];Object.assign(skill,{paid:true,budget,minutes});
+  }
+}

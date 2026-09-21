@@ -7,3 +7,5 @@
 @media(max-width:720px){.intro{margin:4px 0 12px}.skill-choices{margin-top:4px}.sidebar .spaced{margin-top:10px}.sidebar .tags{margin:4px 0 6px}.sidebar .availability{margin:12px 0 20px;padding-top:8px}.sidebar .section-label{min-height:36px}.sidebar .section-label .quiet{min-height:36px}}
 
 .directional-skills{display:grid;gap:16px;margin:24px 0 20px}.directional-skills h3{font-size:23px}.card-person .who{flex-wrap:wrap}.tags .skill-choice{background:transparent}.tags .skill-choice[aria-pressed=true]{background:var(--soft)}
+
+.price-line{display:flex;align-items:baseline;gap:5px;margin-top:15px}.price-line strong{font-size:23px;font-weight:600}.price-line span{font-size:12px;color:var(--muted)}
